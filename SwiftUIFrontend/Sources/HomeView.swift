@@ -1,116 +1,5 @@
 import SwiftUI
 
-struct Category: Identifiable, Hashable {
-    let id: String
-    let title: String
-    let subtitle: String?
-
-    init?(_ dict: [String: Any]) {
-        guard
-            let id = APIExtractor.firstString(dict, keys: ["id", "channel_id", "type_id", "category_id"]),
-            let title = APIExtractor.firstString(dict, keys: ["name", "title", "channel_name", "type_name", "category_name"])
-        else {
-            return nil
-        }
-
-        self.id = id
-        self.title = title
-        self.subtitle = APIExtractor.firstString(dict, keys: ["desc", "description", "subtitle"])
-    }
-}
-
-struct MediaItem: Identifiable, Hashable {
-    let id: String
-    let title: String
-    let subtitle: String?
-    let imageURL: URL?
-    let score: String?
-
-    init?(_ dict: [String: Any]) {
-        guard
-            let id = APIExtractor.firstString(dict, keys: ["id", "vod_id", "video_id"]),
-            let title = APIExtractor.firstString(dict, keys: ["vod_name", "name", "title", "vod_title"])
-        else {
-            return nil
-        }
-
-        self.id = id
-        self.title = title
-        self.subtitle = APIExtractor.firstString(dict, keys: ["vod_sub", "subtitle", "desc", "description"])
-        self.imageURL = APIExtractor.firstURL(dict, keys: ["vod_pic_url", "vod_pic", "cover", "image", "pic"])
-        self.score = APIExtractor.firstString(dict, keys: ["vod_score", "score", "douban_score"])
-    }
-}
-
-@MainActor
-final class HomeViewModel: ObservableObject {
-    @Published var categories: [Category] = []
-    @Published var topics: [MediaItem] = []
-    @Published var sections: [(String, [MediaItem])] = []
-    @Published var featured: MediaItem?
-    @Published var isLoading = false
-    @Published var errorMessage: String?
-
-    private let api = APIClient.shared
-
-    func load(token: String?) async {
-        guard !isLoading else { return }
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
-
-        do {
-            let channelResponse = try await api.fetch(path: "api/channel/get_list", token: token)
-            let topicResponse = try await api.fetch(path: "api/topic/list", token: token)
-            let typeResponse = try await api.fetch(path: "api/type/get_list", token: token)
-
-            categories = uniqueCategories(
-                (APIExtractor.dictionaries(from: channelResponse) +
-                 APIExtractor.dictionaries(from: typeResponse))
-                    .compactMap(Category.init)
-            )
-
-            let parsedTopics = uniqueMedia(
-                APIExtractor.dictionaries(from: topicResponse)
-                    .compactMap(MediaItem.init)
-            )
-            topics = parsedTopics
-            featured = parsedTopics.first
-
-            var built: [(String, [MediaItem])] = []
-            for topic in parsedTopics.prefix(6) {
-                let response = try await api.fetch(
-                    path: "api/topic/vod_list",
-                    parameters: ["topic_id": topic.id, "page": 1, "limit": 12],
-                    token: token
-                )
-                let items = uniqueMedia(
-                    APIExtractor.dictionaries(from: response)
-                        .compactMap(MediaItem.init)
-                )
-                if !items.isEmpty { built.append((topic.title, items)) }
-            }
-            sections = built
-
-            if topics.isEmpty && sections.isEmpty {
-                throw APIError(message: "The service returned no catalog items.")
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func uniqueMedia(_ values: [MediaItem]) -> [MediaItem] {
-        var seen = Set<String>()
-        return values.filter { seen.insert($0.id).inserted }
-    }
-
-    private func uniqueCategories(_ values: [Category]) -> [Category] {
-        var seen = Set<String>()
-        return values.filter { seen.insert($0.id).inserted }
-    }
-}
-
 struct HomeView: View {
     @EnvironmentObject private var session: SessionStore
     @StateObject private var model = HomeViewModel()
@@ -237,7 +126,7 @@ struct HomeView: View {
                     .padding(.top, 8)
             }
             if !model.topics.isEmpty { mediaSection(title: "Trending Now", items: model.topics) }
-            ForEach(Array(model.sections.enumerated()), id: \ .offset) { _, section in
+            ForEach(Array(model.sections.enumerated()), id: \.offset) { _, section in
                 mediaSection(title: section.0, items: section.1)
             }
         }
@@ -273,7 +162,6 @@ struct RemoteImage: View {
             }
         }
     }
-
     private var placeholder: some View {
         Rectangle().fill(.white.opacity(0.10)).overlay(Image(systemName: "film").foregroundStyle(.white.opacity(0.35)))
     }
