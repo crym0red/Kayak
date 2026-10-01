@@ -8,6 +8,7 @@ struct KayakTimeApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(session)
+                .preferredColorScheme(.dark)
         }
     }
 }
