@@ -56,13 +56,24 @@ final class HomeViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            async let channel = api.fetch(path: "api/channel/get_list", token: token)
-            async let topic = api.fetch(path: "api/topic/list", token: token)
-            async let type = api.fetch(path: "api/type/get_list", token: token)
-
-            let channelResponse = try await channel
-            let topicResponse = try await topic
-            let typeResponse = try await type
+            // Keep the responses on the MainActor instead of using `async let`
+            // with the legacy `[String: Any]` response type. `[String: Any]` is
+            // intentionally not Sendable, so concurrent child tasks trigger
+            // Swift 6 strict-concurrency diagnostics. The API calls are kept
+            // sequential here; the UI remains responsive because `fetch` is
+            // asynchronous and performs its network work off the UI thread.
+            let channelResponse = try await api.fetch(
+                path: "api/channel/get_list",
+                token: token
+            )
+            let topicResponse = try await api.fetch(
+                path: "api/topic/list",
+                token: token
+            )
+            let typeResponse = try await api.fetch(
+                path: "api/type/get_list",
+                token: token
+            )
 
             categories = uniqueCategories(
                 (APIExtractor.dictionaries(from: channelResponse) +
