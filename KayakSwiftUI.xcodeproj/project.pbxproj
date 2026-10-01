@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 56;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -29,43 +29,125 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		C10000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		C10000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (
+		); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		D10000000000000000000001 = {isa = PBXGroup; children = (D10000000000000000000002, D10000000000000000000003, D10000000000000000000004,); sourceTree = "<group>"; };
-		D10000000000000000000002 /* SwiftUIFrontend */ = {isa = PBXGroup; children = (D10000000000000000000005, B10000000000000000000009,); path = SwiftUIFrontend; sourceTree = "<group>"; };
-		D10000000000000000000003 /* Products */ = {isa = PBXGroup; children = (B10000000000000000000008); name = Products; sourceTree = "<group>"; };
-		D10000000000000000000004 /* Sources */ = {isa = PBXGroup; children = (B10000000000000000000001, B10000000000000000000002, B10000000000000000000003, B10000000000000000000004, B10000000000000000000005, B10000000000000000000006, B10000000000000000000007,); path = Sources; sourceTree = "<group>"; };
-		D10000000000000000000005 /* Sources */ = {isa = PBXGroup; children = (D10000000000000000000004); path = Sources; sourceTree = "<group>"; };
+		D10000000000000000000001 = {isa = PBXGroup; children = (
+			D10000000000000000000002 /* SwiftUIFrontend */,
+			D10000000000000000000003 /* Products */,
+		); sourceTree = "<group>"; };
+		D10000000000000000000002 /* SwiftUIFrontend */ = {isa = PBXGroup; children = (
+			D10000000000000000000004 /* Sources */,
+			B10000000000000000000009 /* Info.plist */,
+		); path = SwiftUIFrontend; sourceTree = "<group>"; };
+		D10000000000000000000003 /* Products */ = {isa = PBXGroup; children = (
+			B10000000000000000000008 /* KayakSwiftUI.app */,
+		); name = Products; sourceTree = "<group>"; };
+		D10000000000000000000004 /* Sources */ = {isa = PBXGroup; children = (
+			B10000000000000000000001 /* KayakTimeApp.swift */,
+			B10000000000000000000002 /* RootView.swift */,
+			B10000000000000000000003 /* HomeView.swift */,
+			B10000000000000000000004 /* SearchView.swift */,
+			B10000000000000000000005 /* RankingsView.swift */,
+			B10000000000000000000006 /* ProfileView.swift */,
+			B10000000000000000000007 /* SessionStore.swift */,
+		); path = Sources; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		E10000000000000000000001 /* KayakSwiftUI */ = {isa = PBXNativeTarget; buildConfigurationList = E20000000000000000000002 /* Build configuration list for PBXNativeTarget "KayakSwiftUI" */; buildPhases = (E30000000000000000000001, C10000000000000000000001, E30000000000000000000002,); buildRules = (); dependencies = (); name = KayakSwiftUI; productName = KayakSwiftUI; productReference = B10000000000000000000008; productType = "com.apple.product-type.application"; };
+		E10000000000000000000001 /* KayakSwiftUI */ = {isa = PBXNativeTarget; buildConfigurationList = E20000000000000000000002 /* Build configuration list for PBXNativeTarget "KayakSwiftUI" */; buildPhases = (
+			E30000000000000000000001 /* Sources */,
+			C10000000000000000000001 /* Frameworks */,
+			E30000000000000000000002 /* Resources */,
+		); buildRules = (); dependencies = (); name = KayakSwiftUI; productName = KayakSwiftUI; productReference = B10000000000000000000008 /* KayakSwiftUI.app */; productType = "com.apple.product-type.application"; };
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		E00000000000000000000001 /* Project object */ = {isa = PBXProject; attributes = {LastUpgradeCheck = 2600; ORGANIZATIONNAME = KayakTime; TargetAttributes = {E10000000000000000000001 = {CreatedOnToolsVersion = 26.0; }; }; }; buildConfigurationList = E20000000000000000000001 /* Build configuration list for PBXProject "KayakSwiftUI" */; compatibilityVersion = "Xcode 16.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base,); mainGroup = D10000000000000000000001; productRefGroup = D10000000000000000000003 /* Products */; projectDirPath = ""; projectRoot = ""; targets = (E10000000000000000000001); };
+		E00000000000000000000001 /* Project object */ = {isa = PBXProject; attributes = {
+			LastUpgradeCheck = 2600;
+			TargetAttributes = {
+				E10000000000000000000001 = {CreatedOnToolsVersion = 26.0; };
+			};
+		}; buildConfigurationList = E20000000000000000000001 /* Build configuration list for PBXProject "KayakSwiftUI" */; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (
+			en,
+			Base,
+		); mainGroup = D10000000000000000000001; productRefGroup = D10000000000000000000003 /* Products */; projectDirPath = ""; projectRoot = ""; targets = (
+			E10000000000000000000001 /* KayakSwiftUI */,
+		); };
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		E30000000000000000000002 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		E30000000000000000000002 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (
+		); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		E30000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, A10000000000000000000002, A10000000000000000000003, A10000000000000000000004, A10000000000000000000005, A10000000000000000000006, A10000000000000000000007,); runOnlyForDeploymentPostprocessing = 0; };
+		E30000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
+			A10000000000000000000001 /* KayakTimeApp.swift in Sources */,
+			A10000000000000000000002 /* RootView.swift in Sources */,
+			A10000000000000000000003 /* HomeView.swift in Sources */,
+			A10000000000000000000004 /* SearchView.swift in Sources */,
+			A10000000000000000000005 /* RankingsView.swift in Sources */,
+			A10000000000000000000006 /* ProfileView.swift in Sources */,
+			A10000000000000000000007 /* SessionStore.swift in Sources */,
+		); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		F10000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CODE_SIGNING_ALLOWED = NO; CODE_SIGNING_REQUIRED = NO; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = SwiftUIFrontend/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = "ViP.DELvEK.NET"; PRODUCT_NAME = KayakSwiftUI; SDKROOT = iphoneos; SWIFT_VERSION = 6.0; TARGETED_DEVICE_FAMILY = "1,2"; };
-		F10000000000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CODE_SIGNING_ALLOWED = NO; CODE_SIGNING_REQUIRED = NO; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = SwiftUIFrontend/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = "ViP.DELvEK.NET"; PRODUCT_NAME = KayakSwiftUI; SDKROOT = iphoneos; SWIFT_OPTIMIZATION_LEVEL = "-O"; SWIFT_VERSION = 6.0; TARGETED_DEVICE_FAMILY = "1,2"; };
-		F10000000000000000000003 /* Project Debug */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; }; };
-		F10000000000000000000004 /* Project Release */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; }; };
+		F10000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
+			ALWAYS_SEARCH_USER_PATHS = NO;
+			CLANG_ENABLE_MODULES = YES;
+			CODE_SIGNING_ALLOWED = NO;
+			CODE_SIGNING_REQUIRED = NO;
+			CURRENT_PROJECT_VERSION = 1;
+			GENERATE_INFOPLIST_FILE = NO;
+			INFOPLIST_FILE = SwiftUIFrontend/Info.plist;
+			IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+			PRODUCT_BUNDLE_IDENTIFIER = "ViP.DELvEK.NET";
+			PRODUCT_NAME = KayakSwiftUI;
+			SDKROOT = iphoneos;
+			SWIFT_VERSION = 6.0;
+			TARGETED_DEVICE_FAMILY = "1,2";
+		}; };
+		F10000000000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
+			ALWAYS_SEARCH_USER_PATHS = NO;
+			CLANG_ENABLE_MODULES = YES;
+			CODE_SIGNING_ALLOWED = NO;
+			CODE_SIGNING_REQUIRED = NO;
+			CURRENT_PROJECT_VERSION = 1;
+			GENERATE_INFOPLIST_FILE = NO;
+			INFOPLIST_FILE = SwiftUIFrontend/Info.plist;
+			IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+			PRODUCT_BUNDLE_IDENTIFIER = "ViP.DELvEK.NET";
+			PRODUCT_NAME = KayakSwiftUI;
+			SDKROOT = iphoneos;
+			SWIFT_OPTIMIZATION_LEVEL = "-O";
+			SWIFT_VERSION = 6.0;
+			TARGETED_DEVICE_FAMILY = "1,2";
+		}; };
+		F10000000000000000000003 /* Project Debug */ = {isa = XCBuildConfiguration; buildSettings = {
+			ALWAYS_SEARCH_USER_PATHS = NO;
+			CLANG_ENABLE_MODULES = YES;
+			SDKROOT = iphoneos;
+		}; };
+		F10000000000000000000004 /* Project Release */ = {isa = XCBuildConfiguration; buildSettings = {
+			ALWAYS_SEARCH_USER_PATHS = NO;
+			CLANG_ENABLE_MODULES = YES;
+			SDKROOT = iphoneos;
+		}; };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		E20000000000000000000001 /* Build configuration list for PBXProject "KayakSwiftUI" */ = {isa = XCConfigurationList; buildConfigurations = (F10000000000000000000003, F10000000000000000000004,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		E20000000000000000000002 /* Build configuration list for PBXNativeTarget "KayakSwiftUI" */ = {isa = XCConfigurationList; buildConfigurations = (F10000000000000000000001, F10000000000000000000002,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		E20000000000000000000001 /* Build configuration list for PBXProject "KayakSwiftUI" */ = {isa = XCConfigurationList; buildConfigurations = (
+			F10000000000000000000003 /* Project Debug */,
+			F10000000000000000000004 /* Project Release */,
+		); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		E20000000000000000000002 /* Build configuration list for PBXNativeTarget "KayakSwiftUI" */ = {isa = XCConfigurationList; buildConfigurations = (
+			F10000000000000000000001 /* Debug */,
+			F10000000000000000000002 /* Release */,
+		); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 	};
 	rootObject = E00000000000000000000001 /* Project object */;
