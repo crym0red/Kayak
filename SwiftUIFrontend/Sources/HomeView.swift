@@ -18,39 +18,47 @@ final class HomeViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            async let initResponse = api.fetch(path: "api/public/init", token: token)
-            async let channelResponse = api.fetch(path: "api/channel/get_list", token: token)
-            async let topicResponse = api.fetch(path: "api/topic/list", token: token)
-            async let typeResponse = api.fetch(path: "api/type/get_list", token: token)
+            // Do not make the entire screen depend on the optional init call.
+            // The original service exposes independent content endpoints.
+            async let channel = api.fetch(path: "api/channel/get_list", token: token)
+            async let topic = api.fetch(path: "api/topic/list", token: token)
+            async let type = api.fetch(path: "api/type/get_list", token: token)
 
-            _ = try await initResponse
+            let channelResponse = try await channel
+            let topicResponse = try await topic
+            let typeResponse = try await type
 
-            let channels = try await APIExtractor.dictionaries(from: channelResponse)
-            let topicObjects = try await APIExtractor.dictionaries(from: topicResponse)
-            let typeObjects = try await APIExtractor.dictionaries(from: typeResponse)
+            categories = uniqueCategories(
+                (APIExtractor.dictionaries(from: channelResponse) +
+                 APIExtractor.dictionaries(from: typeResponse))
+                    .compactMap(Category.init)
+            )
 
-            categories = uniqueCategories((channels + typeObjects).compactMap(Category.init))
-            let parsedTopics = uniqueMedia(topicObjects.compactMap(MediaItem.init))
+            let parsedTopics = uniqueMedia(
+                APIExtractor.dictionaries(from: topicResponse)
+                    .compactMap(MediaItem.init)
+            )
             topics = parsedTopics
             featured = parsedTopics.first
 
             var built: [(String, [MediaItem])] = []
-            for topic in parsedTopics.prefix(5) {
+            for topic in parsedTopics.prefix(6) {
                 let response = try await api.fetch(
                     path: "api/topic/vod_list",
-                    parameters: [
-                        "topic_id": topic.id,
-                        "page": 1,
-                        "limit": 12
-                    ],
+                    parameters: ["topic_id": topic.id, "page": 1, "limit": 12],
                     token: token
                 )
-                let items = uniqueMedia(APIExtractor.dictionaries(from: response).compactMap(MediaItem.init))
-                if !items.isEmpty {
-                    built.append((topic.title, items))
-                }
+                let items = uniqueMedia(
+                    APIExtractor.dictionaries(from: response)
+                        .compactMap(MediaItem.init)
+                )
+                if !items.isEmpty { built.append((topic.title, items)) }
             }
             sections = built
+
+            if topics.isEmpty && sections.isEmpty {
+                throw APIError(message: "The service returned no catalog items.")
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -73,20 +81,24 @@ struct HomeView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            ZStack {
+            let topInset = min(max(proxy.safeAreaInsets.top, 0), 59)
+
+            ZStack(alignment: .top) {
                 Color(red: 0.04, green: 0.07, blue: 0.08)
                     .ignoresSafeArea()
 
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 0) {
-                        header(topInset: proxy.safeAreaInsets.top)
+                        Color.clear.frame(height: 1)
                         categoryBar
                         hero
                         content
                     }
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 96)
                 }
                 .ignoresSafeArea()
+
+                header(topInset: topInset)
             }
         }
         .task { await model.load(token: session.token) }
@@ -96,24 +108,26 @@ struct HomeView: View {
         HStack(spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 27, weight: .regular))
+                    .font(.system(size: 25, weight: .regular))
                 Text("Search")
-                    .font(.system(size: 23))
-                    .foregroundStyle(.white.opacity(0.88))
-                Spacer()
+                    .font(.system(size: 22))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 18)
-            .frame(height: 60)
+            .frame(height: 58)
+            .frame(maxWidth: .infinity)
             .background(.white.opacity(0.13), in: Capsule())
 
             Image(systemName: "clock")
-                .font(.system(size: 26))
-                .frame(width: 60, height: 60)
+                .font(.system(size: 25))
+                .frame(width: 58, height: 58)
                 .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
 
             Image(systemName: "arrow.down.to.line")
-                .font(.system(size: 27))
-                .frame(width: 60, height: 60)
+                .font(.system(size: 26))
+                .frame(width: 58, height: 58)
                 .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
         }
         .foregroundStyle(.white)
@@ -129,6 +143,7 @@ struct HomeView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
+            .ignoresSafeArea(edges: .top)
         )
     }
 
@@ -138,21 +153,20 @@ struct HomeView: View {
                 Text("Recommend")
                     .font(.system(size: 27, weight: .semibold))
                     .overlay(alignment: .bottom) {
-                        Capsule()
-                            .frame(width: 24, height: 3)
-                            .offset(y: 8)
+                        Capsule().frame(width: 24, height: 3).offset(y: 8)
                     }
-
                 ForEach(model.categories.prefix(8)) { category in
                     Text(category.title)
                         .font(.system(size: 22))
                         .foregroundStyle(.white.opacity(0.78))
+                        .lineLimit(1)
                 }
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 18)
             .padding(.vertical, 13)
         }
+        .padding(.top, 138)
     }
 
     private var hero: some View {
@@ -163,37 +177,21 @@ struct HomeView: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 230)
                         .clipped()
-
-                    LinearGradient(
-                        colors: [.clear, .black.opacity(0.82)],
-                        startPoint: .center,
-                        endPoint: .bottom
-                    )
-
+                    LinearGradient(colors: [.clear, .black.opacity(0.82)], startPoint: .center, endPoint: .bottom)
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(item.title)
-                            .font(.system(size: 28, weight: .bold))
-                        if let subtitle = item.subtitle {
-                            Text(subtitle)
-                                .font(.subheadline)
-                                .foregroundStyle(.white.opacity(0.82))
-                        }
+                        Text(item.title).font(.system(size: 28, weight: .bold))
+                        if let subtitle = item.subtitle { Text(subtitle).font(.subheadline).foregroundStyle(.white.opacity(0.82)) }
                     }
                     .foregroundStyle(.white)
                     .padding(18)
                 }
             } else if model.isLoading {
-                ProgressView()
-                    .tint(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 230)
-                    .background(.white.opacity(0.06))
+                ProgressView().tint(.white).frame(maxWidth: .infinity).frame(height: 230).background(.white.opacity(0.06))
             }
         }
     }
 
-    @ViewBuilder
-    private var content: some View {
+    @ViewBuilder private var content: some View {
         VStack(alignment: .leading, spacing: 24) {
             if let error = model.errorMessage {
                 Text(error)
@@ -202,11 +200,7 @@ struct HomeView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
             }
-
-            if !model.topics.isEmpty {
-                mediaSection(title: "Trending Now", items: model.topics)
-            }
-
+            if !model.topics.isEmpty { mediaSection(title: "Trending Now", items: model.topics) }
             ForEach(Array(model.sections.enumerated()), id: \.offset) { _, section in
                 mediaSection(title: section.0, items: section.1)
             }
@@ -216,35 +210,13 @@ struct HomeView: View {
 
     private func mediaSection(title: String, items: [MediaItem]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.system(size: 25, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 16)
-
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 12),
-                    GridItem(.flexible(), spacing: 12),
-                    GridItem(.flexible(), spacing: 12)
-                ],
-                spacing: 18
-            ) {
+            Text(title).font(.system(size: 25, weight: .semibold)).foregroundStyle(.white).padding(.horizontal, 16)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 18) {
                 ForEach(items.prefix(9)) { item in
                     VStack(alignment: .leading, spacing: 7) {
-                        RemoteImage(url: item.imageURL)
-                            .aspectRatio(0.67, contentMode: .fill)
-                            .clipShape(RoundedRectangle(cornerRadius: 7))
-
-                        Text(item.title)
-                            .font(.system(size: 14, weight: .medium))
-                            .lineLimit(1)
-                            .foregroundStyle(.white)
-
-                        if let score = item.score {
-                            Text(score)
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.65))
-                        }
+                        RemoteImage(url: item.imageURL).aspectRatio(0.67, contentMode: .fill).clipShape(RoundedRectangle(cornerRadius: 7))
+                        Text(item.title).font(.system(size: 14, weight: .medium)).lineLimit(1).foregroundStyle(.white)
+                        if let score = item.score { Text(score).font(.caption).foregroundStyle(.white.opacity(0.65)) }
                     }
                 }
             }
@@ -255,28 +227,17 @@ struct HomeView: View {
 
 struct RemoteImage: View {
     let url: URL?
-
     var body: some View {
         AsyncImage(url: url) { phase in
             switch phase {
-            case .success(let image):
-                image.resizable().scaledToFill()
-            case .failure:
-                placeholder
-            case .empty:
-                placeholder
-            @unknown default:
-                placeholder
+            case .success(let image): image.resizable().scaledToFill()
+            case .failure: placeholder
+            case .empty: placeholder
+            @unknown default: placeholder
             }
         }
     }
-
     private var placeholder: some View {
-        Rectangle()
-            .fill(.white.opacity(0.10))
-            .overlay(
-                Image(systemName: "film")
-                    .foregroundStyle(.white.opacity(0.35))
-            )
+        Rectangle().fill(.white.opacity(0.10)).overlay(Image(systemName: "film").foregroundStyle(.white.opacity(0.35)))
     }
 }

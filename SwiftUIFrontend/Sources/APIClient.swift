@@ -1,7 +1,11 @@
 import Foundation
+import Darwin
 
 struct APIConfig {
     static let baseURL = URL(string: "https://38n8.dvf0.com/")!
+    static let packageName = "kayaktime"
+    static let channelCode = "50009"
+    static let appID = "kayaktimea_1000"
 }
 
 struct APIError: LocalizedError {
@@ -9,65 +13,20 @@ struct APIError: LocalizedError {
     var errorDescription: String? { message }
 }
 
-final class APIClient: Sendable {
+final class APIClient {
     static let shared = APIClient()
-
     private let session: URLSession
+    private let deviceID: String
 
     init(session: URLSession = .shared) {
         self.session = session
-    }
-
-    /// The original service accepts POST requests. Some responses are wrapped,
-    /// returned as a JSON string, or use a form body, so decoding is deliberately
-    /// tolerant instead of relying on one Codable response shape.
-    func request(path: String, parameters: [String: Any] = [:], token: String? = nil) async throws -> Any {
-        guard let url = URL(string: path, relativeTo: APIConfig.baseURL) else {
-            throw APIError(message: "Invalid API path: \(path)")
+        if let saved = UserDefaults.standard.string(forKey: "kayak.api.device_id") {
+            self.deviceID = saved
+        } else {
+            let id = UUID().uuidString.lowercased()
+            UserDefaults.standard.set(id, forKey: "kayak.api.device_id")
+            self.deviceID = id
         }
-
-        let jsonBody = try JSONSerialization.data(withJSONObject: parameters, options: [])
-        let formBody = parameters
-            .map { key, value in
-                "\(Self.escape(key))=\(Self.escape(String(describing: value)))"
-            }
-            .joined(separator: "&")
-            .data(using: .utf8) ?? Data()
-
-        // Try the service's JSON request shape first, then the common
-        // application/x-www-form-urlencoded shape used by legacy API clients.
-        var lastError: Error?
-        for (body, contentType) in [(jsonBody, "application/json; charset=utf-8"),
-                                    (formBody, "application/x-www-form-urlencoded; charset=utf-8")] {
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.timeoutInterval = 25
-            request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
-            request.setValue(contentType, forHTTPHeaderField: "Content-Type")
-            request.setValue("KayakTime/1.0 (iOS)", forHTTPHeaderField: "User-Agent")
-            if let token, !token.isEmpty {
-                request.setValue(token, forHTTPHeaderField: "token")
-                request.setValue("Token token=\"\(token)\"", forHTTPHeaderField: "Authorization")
-            }
-            request.httpBody = body
-
-            do {
-                let (data, response) = try await session.data(for: request)
-                guard let http = response as? HTTPURLResponse else {
-                    throw APIError(message: "The server returned an invalid response.")
-                }
-                guard (200...299).contains(http.statusCode) else {
-                    throw APIError(message: "API returned HTTP \(http.statusCode).")
-                }
-
-                guard !data.isEmpty else { return [:] }
-                return try Self.decodeServerPayload(data)
-            } catch {
-                lastError = error
-            }
-        }
-
-        throw lastError ?? APIError(message: "The server returned data in an unsupported format.")
     }
 
     func fetch(path: String, parameters: [String: Any] = [:], token: String? = nil) async throws -> [String: Any] {
@@ -75,6 +34,102 @@ final class APIClient: Sendable {
         if let object = value as? [String: Any] { return object }
         if let array = value as? [Any] { return ["data": array] }
         return ["data": value]
+    }
+
+    func request(path: String, parameters: [String: Any] = [:], token: String? = nil) async throws -> Any {
+        guard let url = URL(string: path, relativeTo: APIConfig.baseURL) else {
+            throw APIError(message: "Invalid API path: \(path)")
+        }
+
+        var params = baseParameters(token: token)
+        for (key, value) in parameters { params[key] = value }
+
+        // The original app exposes these fields in its request contract. The
+        // service is legacy and expects form data more reliably than JSON.
+        let formData = formEncode(params)
+        let jsonData = try JSONSerialization.data(withJSONObject: params, options: [])
+
+        var attempts: [(URLRequest, Data)] = []
+
+        var formRequest = URLRequest(url: url)
+        formRequest.httpMethod = "POST"
+        formRequest.timeoutInterval = 25
+        formRequest.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
+        formRequest.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        formRequest.setValue("KayakTime/1.0 (iPhone; iOS)", forHTTPHeaderField: "User-Agent")
+        formRequest.httpBody = formData
+        addAuth(&formRequest, token: token)
+        attempts.append((formRequest, formData))
+
+        var jsonRequest = formRequest
+        jsonRequest.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        jsonRequest.httpBody = jsonData
+        attempts.append((jsonRequest, jsonData))
+
+        var lastMessage = "The server did not return usable data."
+        for (request, _) in attempts {
+            do {
+                let (data, response) = try await session.data(for: request)
+                guard let http = response as? HTTPURLResponse else { continue }
+                guard (200...299).contains(http.statusCode) else {
+                    lastMessage = "API returned HTTP \(http.statusCode)."
+                    continue
+                }
+                if data.isEmpty { return [:] }
+                let payload = try Self.decodeServerPayload(data)
+                if let message = Self.serverErrorMessage(payload), !message.isEmpty {
+                    lastMessage = message
+                    continue
+                }
+                return payload
+            } catch {
+                lastMessage = error.localizedDescription
+            }
+        }
+
+        throw APIError(message: lastMessage)
+    }
+
+    private func baseParameters(token: String?) -> [String: Any] {
+        let locale = Locale.current.language.languageCode?.identifier ?? "en"
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        let osVersion = "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"
+        return [
+            "channel_code": APIConfig.channelCode,
+            "sys_platform": "30000",
+            "device_id": deviceID,
+            "sysrelease": osVersion,
+            "mobmodel": Self.machineModel,
+            "mob_mfr": "Apple",
+            "package_name": APIConfig.packageName,
+            "app_id": APIConfig.appID,
+            "app_version": "1.0",
+            "version": "1.0",
+            "api_version": "1.0",
+            "is_vvv": "0",
+            "is_language": "1",
+            "is_display": "1",
+            "app_language": locale,
+            "lang": locale,
+            "token": token ?? ""
+        ]
+    }
+
+    private func addAuth(_ request: inout URLRequest, token: String?) {
+        request.setValue(APIConfig.packageName, forHTTPHeaderField: "X-App-Package")
+        request.setValue(APIConfig.channelCode, forHTTPHeaderField: "X-Channel-Code")
+        if let token, !token.isEmpty {
+            request.setValue(token, forHTTPHeaderField: "token")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+    }
+
+    private func formEncode(_ values: [String: Any]) -> Data {
+        let body = values.keys.sorted().map { key in
+            let value = String(describing: values[key]!)
+            return "\(Self.escape(key))=\(Self.escape(value))"
+        }.joined(separator: "&")
+        return Data(body.utf8)
     }
 
     private static func decodeServerPayload(_ data: Data) throws -> Any {
@@ -86,43 +141,53 @@ final class APIClient: Sendable {
                 candidates.append(cleanedData)
             }
         }
-
         for candidate in candidates {
             if let value = try? JSONSerialization.jsonObject(with: candidate, options: [.fragmentsAllowed]) {
                 return normalizeJSON(value)
             }
         }
-
-        let preview = String(data: data.prefix(180), encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "<non-text response>"
-        throw APIError(message: "The API response was not valid JSON: \(preview)")
+        let preview = String(data: data.prefix(180), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "<non-text response>"
+        throw APIError(message: "API returned an unreadable response: \(preview)")
     }
 
     private static func normalizeJSON(_ value: Any) -> Any {
-        // Some legacy gateways return JSON encoded as a JSON string.
         if let string = value as? String,
            let nested = string.data(using: .utf8),
            let decoded = try? JSONSerialization.jsonObject(with: nested, options: [.fragmentsAllowed]) {
             return normalizeJSON(decoded)
         }
-
-        if let array = value as? [Any] {
-            return array.map(normalizeJSON)
-        }
-
+        if let array = value as? [Any] { return array.map(normalizeJSON) }
         if let dictionary = value as? [String: Any] {
-            var result: [String: Any] = [:]
-            for (key, child) in dictionary {
-                result[key] = normalizeJSON(child)
-            }
-            return result
+            return dictionary.mapValues(normalizeJSON)
         }
-
         return value
+    }
+
+    private static func serverErrorMessage(_ value: Any) -> String? {
+        guard let dict = value as? [String: Any] else { return nil }
+        let keys = ["error_msg", "msg", "message", "error", "errmsg"]
+        for key in keys {
+            if let message = dict[key] as? String, !message.isEmpty {
+                let success = (dict["success"] as? Bool) ?? true
+                let code = dict["code"] as? Int
+                if success == false || (code != nil && code != 0) || message.contains("系统") {
+                    return message
+                }
+            }
+        }
+        return nil
     }
 
     private static func escape(_ value: String) -> String {
         value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
+    }
+
+    private static var machineModel: String {
+        var size = 0
+        sysctlbyname("hw.machine", nil, &size, nil, 0)
+        var machine = [CChar](repeating: 0, count: size)
+        sysctlbyname("hw.machine", &machine, &size, nil, 0)
+        return String(cString: machine)
     }
 }
 
@@ -136,24 +201,11 @@ struct APIExtractor {
     private static func walk(_ value: Any, into output: inout [[String: Any]]) {
         if let dictionary = value as? [String: Any] {
             output.append(dictionary)
-
-            // Explicitly walk common API envelope keys first.
-            for key in ["data", "result", "list", "vod_list", "topic_list", "channel_list", "type_list", "rows", "items"] {
-                if let child = dictionary[key] {
-                    walk(child, into: &output)
-                }
-            }
-
-            for (key, child) in dictionary where !["data", "result", "list", "vod_list", "topic_list", "channel_list", "type_list", "rows", "items"].contains(key) {
-                _ = key
-                walk(child, into: &output)
-            }
+            let priority = ["data", "result", "vod_list", "topic_list", "channel_list", "type_list", "list", "rows", "items", "vod_info"]
+            for key in priority where dictionary[key] != nil { walk(dictionary[key]!, into: &output) }
+            for (key, child) in dictionary where !priority.contains(key) { _ = key; walk(child, into: &output) }
         } else if let array = value as? [Any] {
             for child in array { walk(child, into: &output) }
-        } else if let string = value as? String,
-                  let data = string.data(using: .utf8),
-                  let decoded = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
-            walk(decoded, into: &output)
         }
     }
 

@@ -1,17 +1,21 @@
-# KayakTime UI/API format + full-screen safe-area patch
+KayakTime UI/API correction
 
-Replace the matching files in the existing repository.
+Replace only:
+- SwiftUIFrontend/Sources/APIClient.swift
+- SwiftUIFrontend/Sources/RootView.swift
+- SwiftUIFrontend/Sources/HomeView.swift
+- SwiftUIFrontend/Sources/SearchView.swift
 
-Changes:
-- API client tolerates JSON envelopes and JSON encoded as strings.
-- Retries legacy form-encoded POST bodies.
-- Preserves the existing API host and endpoints.
-- Expands common `data/result/list/vod_list/topic_list/...` response containers.
-- Home/search no longer rely on a single Codable JSON shape.
-- RootView is edge-to-edge using the proven Fugacious full-screen pattern.
-- The background and primary content extend through the Dynamic Island/status-bar and Home Indicator areas.
-- Safe-area handling is applied only where interactive controls need it.
-- Bottom navigation remains above the Home Indicator via `safeAreaInset`.
-- Removed the fixed bottom content padding that was creating the oversized lower gap.
-- Search header uses the device's actual top safe-area inset rather than a fixed offset.
-- No backend/runtime files are changed.
+API:
+- Uses the recovered KayakTime request fields (channel_code 50009, sys_platform 30000, package_name kayaktime, app_id kayaktimea_1000, device/runtime metadata, token).
+- Sends the fields in form-encoded POST first, then JSON as fallback.
+- Keeps the preserved backend host and endpoint names.
+- Treats the service's Chinese error envelope as an API failure instead of a JSON parsing failure.
+- Does not make api/public/init a hard dependency for rendering the catalog.
+
+UI:
+- Root is edge-to-edge.
+- Top safe-area inset is capped to the real modern-iPhone range so a bad/inherited inset cannot create the large black gap.
+- Header is overlaid on the edge-to-edge content and its background extends behind the status area.
+- Bottom navigation is a fixed-height safe-area inset with single-line labels and no wrapping.
+- Scroll content reserves space for the bottom navigation.
