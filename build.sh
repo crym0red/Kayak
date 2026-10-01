@@ -31,6 +31,7 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   AD_HOC_CODE_SIGNING_ALLOWED=NO \
+  PRODUCT_NAME=KayakSwiftUI \
   build
 
 APP_PATH="$(find "$DERIVED_DATA/Build/Products" -type d -name '*.app' -path '*iphoneos*' -print -quit)"
