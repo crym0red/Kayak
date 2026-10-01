@@ -9,7 +9,7 @@ struct APIError: LocalizedError {
     var errorDescription: String? { message }
 }
 
-final class APIClient {
+final class APIClient: Sendable {
     static let shared = APIClient()
 
     private let session: URLSession
