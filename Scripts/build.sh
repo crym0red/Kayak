@@ -10,12 +10,19 @@ BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
 DERIVED_DATA="${DERIVED_DATA:-$BUILD_DIR/DerivedData}"
 UNSIGNED_IPA="${UNSIGNED_IPA:-$BUILD_DIR/${SCHEME}-unsigned.ipa}"
 
+PROJECT_PATH="${PROJECT_PATH:-$(find "$ROOT" -maxdepth 3 -type d -name "${SCHEME}.xcodeproj" -print -quit)}"
+if [ -z "$PROJECT_PATH" ]; then
+  echo "ERROR: ${SCHEME}.xcodeproj not found under $ROOT"
+  exit 1
+fi
+
+echo "==> Xcode project: $PROJECT_PATH"
 mkdir -p "$BUILD_DIR"
 rm -rf "$DERIVED_DATA"
 
 echo "==> Building unsigned iOS app"
 xcodebuild \
-  -project "$SCHEME.xcodeproj" \
+  -project "$PROJECT_PATH" \
   -scheme "$SCHEME" \
   -configuration "$CONFIGURATION" \
   -sdk iphoneos \

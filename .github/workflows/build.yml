@@ -25,9 +25,15 @@ jobs:
 
       - name: Resolve Swift packages
         run: |
+          PROJECT=$(find . -maxdepth 3 -type d -name 'KayakSwiftUI.xcodeproj' -print -quit)
+          if [ -z "$PROJECT" ]; then
+            echo "ERROR: KayakSwiftUI.xcodeproj not found"
+            exit 1
+          fi
+          echo "Using project: $PROJECT"
           xcodebuild \
             -resolvePackageDependencies \
-            -project KayakSwiftUI.xcodeproj \
+            -project "$PROJECT" \
             -scheme KayakSwiftUI
 
       - name: Build unsigned IPA
