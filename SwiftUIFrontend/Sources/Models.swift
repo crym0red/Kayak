@@ -1,5 +1,47 @@
 import SwiftUI
 
+struct Category: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let subtitle: String?
+
+    init?(_ dict: [String: Any]) {
+        guard
+            let id = APIExtractor.firstString(dict, keys: ["id", "channel_id", "type_id", "category_id"]),
+            let title = APIExtractor.firstString(dict, keys: ["name", "title", "channel_name", "type_name", "category_name"])
+        else {
+            return nil
+        }
+
+        self.id = id
+        self.title = title
+        self.subtitle = APIExtractor.firstString(dict, keys: ["desc", "description", "subtitle"])
+    }
+}
+
+struct MediaItem: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let subtitle: String?
+    let imageURL: URL?
+    let score: String?
+
+    init?(_ dict: [String: Any]) {
+        guard
+            let id = APIExtractor.firstString(dict, keys: ["id", "vod_id", "video_id"]),
+            let title = APIExtractor.firstString(dict, keys: ["vod_name", "name", "title", "vod_title"])
+        else {
+            return nil
+        }
+
+        self.id = id
+        self.title = title
+        self.subtitle = APIExtractor.firstString(dict, keys: ["vod_sub", "subtitle", "desc", "description"])
+        self.imageURL = APIExtractor.firstURL(dict, keys: ["vod_pic_url", "vod_pic", "cover", "image", "pic"])
+        self.score = APIExtractor.firstString(dict, keys: ["vod_score", "score", "douban_score"])
+    }
+}
+
 @MainActor
 final class HomeViewModel: ObservableObject {
     @Published var categories: [Category] = []
@@ -18,9 +60,6 @@ final class HomeViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            // Avoid crossing actor isolation with concurrent `async let` captures.
-            // These fetches are independent, but they all return dictionary payloads
-            // that are not Sendable under Swift 6 concurrency checks.
             let channelResponse = try await api.fetch(path: "api/channel/get_list", token: token)
             let topicResponse = try await api.fetch(path: "api/topic/list", token: token)
             let typeResponse = try await api.fetch(path: "api/type/get_list", token: token)
@@ -234,8 +273,10 @@ struct RemoteImage: View {
             }
         }
     }
+
     private var placeholder: some View {
         Rectangle().fill(.white.opacity(0.10)).overlay(Image(systemName: "film").foregroundStyle(.white.opacity(0.35)))
     }
 }
 
+            

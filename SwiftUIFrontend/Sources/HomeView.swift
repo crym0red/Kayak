@@ -1,226 +1,280 @@
-import Foundation
-import Darwin
+import SwiftUI
 
-struct APIConfig {
-    static let baseURL = URL(string: "https://38n8.dvf0.com/")!
-    static let packageName = "kayaktime"
-    static let channelCode = "50009"
-    static let appID = "kayaktimea_1000"
+struct Category: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let subtitle: String?
+
+    init?(_ dict: [String: Any]) {
+        guard
+            let id = APIExtractor.firstString(dict, keys: ["id", "channel_id", "type_id", "category_id"]),
+            let title = APIExtractor.firstString(dict, keys: ["name", "title", "channel_name", "type_name", "category_name"])
+        else {
+            return nil
+        }
+
+        self.id = id
+        self.title = title
+        self.subtitle = APIExtractor.firstString(dict, keys: ["desc", "description", "subtitle"])
+    }
 }
 
-struct APIError: LocalizedError {
-    let message: String
-    var errorDescription: String? { message }
+struct MediaItem: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let subtitle: String?
+    let imageURL: URL?
+    let score: String?
+
+    init?(_ dict: [String: Any]) {
+        guard
+            let id = APIExtractor.firstString(dict, keys: ["id", "vod_id", "video_id"]),
+            let title = APIExtractor.firstString(dict, keys: ["vod_name", "name", "title", "vod_title"])
+        else {
+            return nil
+        }
+
+        self.id = id
+        self.title = title
+        self.subtitle = APIExtractor.firstString(dict, keys: ["vod_sub", "subtitle", "desc", "description"])
+        self.imageURL = APIExtractor.firstURL(dict, keys: ["vod_pic_url", "vod_pic", "cover", "image", "pic"])
+        self.score = APIExtractor.firstString(dict, keys: ["vod_score", "score", "douban_score"])
+    }
 }
 
-final class APIClient {
-    static let shared = APIClient()
-    private let session: URLSession
-    private let deviceID: String
+@MainActor
+final class HomeViewModel: ObservableObject {
+    @Published var categories: [Category] = []
+    @Published var topics: [MediaItem] = []
+    @Published var sections: [(String, [MediaItem])] = []
+    @Published var featured: MediaItem?
+    @Published var isLoading = false
+    @Published var errorMessage: String?
 
-    init(session: URLSession = .shared) {
-        self.session = session
-        if let saved = UserDefaults.standard.string(forKey: "kayak.api.device_id") {
-            self.deviceID = saved
-        } else {
-            let id = UUID().uuidString.lowercased()
-            UserDefaults.standard.set(id, forKey: "kayak.api.device_id")
-            self.deviceID = id
+    private let api = APIClient.shared
+
+    func load(token: String?) async {
+        guard !isLoading else { return }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            let channelResponse = try await api.fetch(path: "api/channel/get_list", token: token)
+            let topicResponse = try await api.fetch(path: "api/topic/list", token: token)
+            let typeResponse = try await api.fetch(path: "api/type/get_list", token: token)
+
+            categories = uniqueCategories(
+                (APIExtractor.dictionaries(from: channelResponse) +
+                 APIExtractor.dictionaries(from: typeResponse))
+                    .compactMap(Category.init)
+            )
+
+            let parsedTopics = uniqueMedia(
+                APIExtractor.dictionaries(from: topicResponse)
+                    .compactMap(MediaItem.init)
+            )
+            topics = parsedTopics
+            featured = parsedTopics.first
+
+            var built: [(String, [MediaItem])] = []
+            for topic in parsedTopics.prefix(6) {
+                let response = try await api.fetch(
+                    path: "api/topic/vod_list",
+                    parameters: ["topic_id": topic.id, "page": 1, "limit": 12],
+                    token: token
+                )
+                let items = uniqueMedia(
+                    APIExtractor.dictionaries(from: response)
+                        .compactMap(MediaItem.init)
+                )
+                if !items.isEmpty { built.append((topic.title, items)) }
+            }
+            sections = built
+
+            if topics.isEmpty && sections.isEmpty {
+                throw APIError(message: "The service returned no catalog items.")
+            }
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
-    func fetch(path: String, parameters: [String: Any] = [:], token: String? = nil) async throws -> [String: Any] {
-        let value = try await request(path: path, parameters: parameters, token: token)
-        if let object = value as? [String: Any] { return object }
-        if let array = value as? [Any] { return ["data": array] }
-        return ["data": value]
+    private func uniqueMedia(_ values: [MediaItem]) -> [MediaItem] {
+        var seen = Set<String>()
+        return values.filter { seen.insert($0.id).inserted }
     }
 
-    func request(path: String, parameters: [String: Any] = [:], token: String? = nil) async throws -> Any {
-        guard let url = URL(string: path, relativeTo: APIConfig.baseURL) else {
-            throw APIError(message: "Invalid API path: \(path)")
-        }
+    private func uniqueCategories(_ values: [Category]) -> [Category] {
+        var seen = Set<String>()
+        return values.filter { seen.insert($0.id).inserted }
+    }
+}
 
-        var params = baseParameters(token: token)
-        for (key, value) in parameters { params[key] = value }
+struct HomeView: View {
+    @EnvironmentObject private var session: SessionStore
+    @StateObject private var model = HomeViewModel()
 
-        // The original app exposes these fields in its request contract. The
-        // service is legacy and expects form data more reliably than JSON.
-        let formData = formEncode(params)
-        let jsonData = try JSONSerialization.data(withJSONObject: params, options: [])
+    var body: some View {
+        GeometryReader { proxy in
+            let topInset = min(max(proxy.safeAreaInsets.top, 0), 59)
 
-        var attempts: [(URLRequest, Data)] = []
+            ZStack(alignment: .top) {
+                Color(red: 0.04, green: 0.07, blue: 0.08)
+                    .ignoresSafeArea()
 
-        var formRequest = URLRequest(url: url)
-        formRequest.httpMethod = "POST"
-        formRequest.timeoutInterval = 25
-        formRequest.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
-        formRequest.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
-        formRequest.setValue("KayakTime/1.0 (iPhone; iOS)", forHTTPHeaderField: "User-Agent")
-        formRequest.httpBody = formData
-        addAuth(&formRequest, token: token)
-        attempts.append((formRequest, formData))
-
-        var jsonRequest = formRequest
-        jsonRequest.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-        jsonRequest.httpBody = jsonData
-        attempts.append((jsonRequest, jsonData))
-
-        var lastMessage = "The server did not return usable data."
-        for (request, _) in attempts {
-            do {
-                let (data, response) = try await session.data(for: request)
-                guard let http = response as? HTTPURLResponse else { continue }
-                guard (200...299).contains(http.statusCode) else {
-                    lastMessage = "API returned HTTP \(http.statusCode)."
-                    continue
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Color.clear.frame(height: 1)
+                        categoryBar
+                        hero
+                        content
+                    }
+                    .padding(.bottom, 96)
                 }
-                if data.isEmpty { return [:] }
-                let payload = try Self.decodeServerPayload(data)
-                if let message = Self.serverErrorMessage(payload), !message.isEmpty {
-                    lastMessage = message
-                    continue
-                }
-                return payload
-            } catch {
-                lastMessage = error.localizedDescription
+                .ignoresSafeArea()
+
+                header(topInset: topInset)
             }
         }
-
-        throw APIError(message: lastMessage)
+        .task { await model.load(token: session.token) }
     }
 
-    private func baseParameters(token: String?) -> [String: Any] {
-        let locale = Locale.current.language.languageCode?.identifier ?? "en"
-        let os = ProcessInfo.processInfo.operatingSystemVersion
-        let osVersion = "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"
-        return [
-            "channel_code": APIConfig.channelCode,
-            "sys_platform": "30000",
-            "device_id": deviceID,
-            "sysrelease": osVersion,
-            "mobmodel": Self.machineModel,
-            "mob_mfr": "Apple",
-            "package_name": APIConfig.packageName,
-            "app_id": APIConfig.appID,
-            "app_version": "1.0",
-            "version": "1.0",
-            "api_version": "1.0",
-            "is_vvv": "0",
-            "is_language": "1",
-            "is_display": "1",
-            "app_language": locale,
-            "lang": locale,
-            "token": token ?? ""
-        ]
-    }
-
-    private func addAuth(_ request: inout URLRequest, token: String?) {
-        request.setValue(APIConfig.packageName, forHTTPHeaderField: "X-App-Package")
-        request.setValue(APIConfig.channelCode, forHTTPHeaderField: "X-Channel-Code")
-        if let token, !token.isEmpty {
-            request.setValue(token, forHTTPHeaderField: "token")
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-    }
-
-    private func formEncode(_ values: [String: Any]) -> Data {
-        let body = values.keys.sorted().map { key in
-            let value = String(describing: values[key]!)
-            return "\(Self.escape(key))=\(Self.escape(value))"
-        }.joined(separator: "&")
-        return Data(body.utf8)
-    }
-
-    private static func decodeServerPayload(_ data: Data) throws -> Any {
-        var candidates: [Data] = [data]
-        if let text = String(data: data, encoding: .utf8) {
-            let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                .replacingOccurrences(of: "\u{FEFF}", with: "")
-            if let cleanedData = cleaned.data(using: .utf8), cleanedData != data {
-                candidates.append(cleanedData)
+    private func header(topInset: CGFloat) -> some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 25, weight: .regular))
+                Text("Search")
+                    .font(.system(size: 22))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, 18)
+            .frame(height: 58)
+            .frame(maxWidth: .infinity)
+            .background(.white.opacity(0.13), in: Capsule())
+
+            Image(systemName: "clock")
+                .font(.system(size: 25))
+                .frame(width: 58, height: 58)
+                .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+
+            Image(systemName: "arrow.down.to.line")
+                .font(.system(size: 26))
+                .frame(width: 58, height: 58)
+                .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
         }
-        for candidate in candidates {
-            if let value = try? JSONSerialization.jsonObject(with: candidate, options: [.fragmentsAllowed]) {
-                return normalizeJSON(value)
-            }
-        }
-        let preview = String(data: data.prefix(180), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "<non-text response>"
-        throw APIError(message: "API returned an unreadable response: \(preview)")
+        .foregroundStyle(.white)
+        .padding(.horizontal, 16)
+        .padding(.top, topInset + 8)
+        .padding(.bottom, 12)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color(red: 0.02, green: 0.40, blue: 0.52),
+                    Color(red: 0.04, green: 0.10, blue: 0.13)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .top)
+        )
     }
 
-    private static func normalizeJSON(_ value: Any) -> Any {
-        if let string = value as? String,
-           let nested = string.data(using: .utf8),
-           let decoded = try? JSONSerialization.jsonObject(with: nested, options: [.fragmentsAllowed]) {
-            return normalizeJSON(decoded)
-        }
-        if let array = value as? [Any] { return array.map(normalizeJSON) }
-        if let dictionary = value as? [String: Any] {
-            return dictionary.mapValues(normalizeJSON)
-        }
-        return value
-    }
-
-    private static func serverErrorMessage(_ value: Any) -> String? {
-        guard let dict = value as? [String: Any] else { return nil }
-        let keys = ["error_msg", "msg", "message", "error", "errmsg"]
-        for key in keys {
-            if let message = dict[key] as? String, !message.isEmpty {
-                let success = (dict["success"] as? Bool) ?? true
-                let code = dict["code"] as? Int
-                if success == false || (code != nil && code != 0) || message.contains("系统") {
-                    return message
+    private var categoryBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 30) {
+                Text("Recommend")
+                    .font(.system(size: 27, weight: .semibold))
+                    .overlay(alignment: .bottom) {
+                        Capsule().frame(width: 24, height: 3).offset(y: 8)
+                    }
+                ForEach(model.categories.prefix(8)) { category in
+                    Text(category.title)
+                        .font(.system(size: 22))
+                        .foregroundStyle(.white.opacity(0.78))
+                        .lineLimit(1)
                 }
             }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 13)
         }
-        return nil
+        .padding(.top, 138)
     }
 
-    private static func escape(_ value: String) -> String {
-        value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
+    private var hero: some View {
+        Group {
+            if let item = model.featured {
+                ZStack(alignment: .bottomLeading) {
+                    RemoteImage(url: item.imageURL)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 230)
+                        .clipped()
+                    LinearGradient(colors: [.clear, .black.opacity(0.82)], startPoint: .center, endPoint: .bottom)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(item.title).font(.system(size: 28, weight: .bold))
+                        if let subtitle = item.subtitle { Text(subtitle).font(.subheadline).foregroundStyle(.white.opacity(0.82)) }
+                    }
+                    .foregroundStyle(.white)
+                    .padding(18)
+                }
+            } else if model.isLoading {
+                ProgressView().tint(.white).frame(maxWidth: .infinity).frame(height: 230).background(.white.opacity(0.06))
+            }
+        }
     }
 
-    private static var machineModel: String {
-        var size = 0
-        sysctlbyname("hw.machine", nil, &size, nil, 0)
-        var machine = [CChar](repeating: 0, count: size)
-        sysctlbyname("hw.machine", &machine, &size, nil, 0)
-        return String(cString: machine)
+    @ViewBuilder private var content: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            if let error = model.errorMessage {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.72))
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+            }
+            if !model.topics.isEmpty { mediaSection(title: "Trending Now", items: model.topics) }
+            ForEach(Array(model.sections.enumerated()), id: \ .offset) { _, section in
+                mediaSection(title: section.0, items: section.1)
+            }
+        }
+        .padding(.top, 22)
+    }
+
+    private func mediaSection(title: String, items: [MediaItem]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(.system(size: 25, weight: .semibold)).foregroundStyle(.white).padding(.horizontal, 16)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 18) {
+                ForEach(items.prefix(9)) { item in
+                    VStack(alignment: .leading, spacing: 7) {
+                        RemoteImage(url: item.imageURL).aspectRatio(0.67, contentMode: .fill).clipShape(RoundedRectangle(cornerRadius: 7))
+                        Text(item.title).font(.system(size: 14, weight: .medium)).lineLimit(1).foregroundStyle(.white)
+                        if let score = item.score { Text(score).font(.caption).foregroundStyle(.white.opacity(0.65)) }
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+        }
     }
 }
 
-struct APIExtractor {
-    static func dictionaries(from value: Any) -> [[String: Any]] {
-        var output: [[String: Any]] = []
-        walk(value, into: &output)
-        return output
-    }
-
-    private static func walk(_ value: Any, into output: inout [[String: Any]]) {
-        if let dictionary = value as? [String: Any] {
-            output.append(dictionary)
-            let priority = ["data", "result", "vod_list", "topic_list", "channel_list", "type_list", "list", "rows", "items", "vod_info"]
-            for key in priority where dictionary[key] != nil { walk(dictionary[key]!, into: &output) }
-            for (key, child) in dictionary where !priority.contains(key) { _ = key; walk(child, into: &output) }
-        } else if let array = value as? [Any] {
-            for child in array { walk(child, into: &output) }
+struct RemoteImage: View {
+    let url: URL?
+    var body: some View {
+        AsyncImage(url: url) { phase in
+            switch phase {
+            case .success(let image): image.resizable().scaledToFill()
+            case .failure: placeholder
+            case .empty: placeholder
+            @unknown default: placeholder
+            }
         }
     }
 
-    static func firstString(_ object: [String: Any], keys: [String]) -> String? {
-        for key in keys {
-            if let value = object[key] as? String, !value.isEmpty { return value }
-            if let value = object[key] as? NSNumber { return value.stringValue }
-        }
-        return nil
-    }
-
-    static func firstURL(_ object: [String: Any], keys: [String]) -> URL? {
-        guard let value = firstString(object, keys: keys) else { return nil }
-        if let url = URL(string: value), url.scheme != nil { return url }
-        return URL(string: value, relativeTo: APIConfig.baseURL)
+    private var placeholder: some View {
+        Rectangle().fill(.white.opacity(0.10)).overlay(Image(systemName: "film").foregroundStyle(.white.opacity(0.35)))
     }
 }
-
