@@ -1,0 +1,136 @@
+// MRzefvAM.dylib — nav bar branding overlay for audiomack_iphone
+// Injects a subtitle label directly beneath the audiomack wordmark.
+//
+// Target: audiomack_iphone.NavigationBarVC  (hosting view 390x52)
+// Swift class names contain dots -> logos %hook can't parse them,
+// so we hook with objc runtime method_setImplementation.
+
+#import <UIKit/UIKit.h>
+#import <objc/runtime.h>
+
+#pragma mark - Config
+
+static NSString *const kBrandText   = @"Bypassed by MRzefv edition";
+static const NSInteger kBrandTag    = 0x5A3F01;
+
+// Leading inset matches the logo's left edge (logo starts ~x=8-20 in a 390pt bar).
+static const CGFloat kLeadingInset  = 20.0;
+// Distance from the bottom of the nav bar.
+static const CGFloat kBottomInset   = 3.0;
+static const CGFloat kFontSize      = 8.5;
+
+// audiomack orange. Swap to 0xFF3B4E for SINLITE red.
+static UIColor *SLBrandColor(void) {
+    return [UIColor colorWithRed:1.0 green:0.478 blue:0.0 alpha:0.92];
+}
+
+#pragma mark - Label
+
+static UILabel *SLMakeLabel(void) {
+    UILabel *l = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 0, 0)];
+    l.tag                       = kBrandTag;
+    l.text                      = kBrandText;
+    l.font                      = [UIFont systemFontOfSize:kFontSize weight:UIFontWeightSemibold];
+    l.textColor                 = SLBrandColor();
+    l.textAlignment             = NSTextAlignmentLeft;
+    l.numberOfLines             = 1;
+    l.adjustsFontSizeToFitWidth = YES;
+    l.minimumScaleFactor        = 0.7;
+    l.backgroundColor           = [UIColor clearColor];
+    l.userInteractionEnabled    = NO;
+    // Keep it above the SwiftUI hosting view so a re-render can't bury it.
+    l.layer.zPosition           = 999.0;
+    l.translatesAutoresizingMaskIntoConstraints = NO;
+    return l;
+}
+
+static void SLAttachBrand(UIViewController *vc) {
+    if (![vc isKindOfClass:[UIViewController class]]) return;
+    UIView *host = vc.view;
+    if (!host) return;
+
+    UILabel *existing = (UILabel *)[host viewWithTag:kBrandTag];
+    if (existing) {
+        // Already attached — just make sure nothing hid it.
+        existing.hidden = NO;
+        existing.alpha  = 1.0;
+        [host bringSubviewToFront:existing];
+        return;
+    }
+
+    UILabel *label = SLMakeLabel();
+    [host addSubview:label];
+    [host bringSubviewToFront:label];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [label.leadingAnchor  constraintEqualToAnchor:host.leadingAnchor
+                                             constant:kLeadingInset],
+        [label.trailingAnchor constraintLessThanOrEqualToAnchor:host.trailingAnchor
+                                                       constant:-8.0],
+        [label.bottomAnchor   constraintEqualToAnchor:host.bottomAnchor
+                                             constant:-kBottomInset],
+    ]];
+}
+
+#pragma mark - Hook
+
+static void (*orig_viewDidLayoutSubviews)(id, SEL);
+
+static void hook_viewDidLayoutSubviews(id self, SEL _cmd) {
+    if (orig_viewDidLayoutSubviews) orig_viewDidLayoutSubviews(self, _cmd);
+    SLAttachBrand((UIViewController *)self);
+}
+
+static void (*orig_viewDidAppear)(id, SEL, BOOL);
+
+static void hook_viewDidAppear(id self, SEL _cmd, BOOL animated) {
+    if (orig_viewDidAppear) orig_viewDidAppear(self, _cmd, animated);
+    SLAttachBrand((UIViewController *)self);
+}
+
+static void SLSwizzle(Class cls, SEL sel, IMP replacement, IMP *storeOrig) {
+    if (!cls) return;
+    Method m = class_getInstanceMethod(cls, sel);
+    if (!m) return;
+    *storeOrig = method_getImplementation(m);
+    method_setImplementation(m, replacement);
+}
+
+#pragma mark - Entry
+
+__attribute__((constructor))
+static void MRzefvAMInit(void) {
+    @autoreleasepool {
+        // Swift-mangled class name. Fall back across plausible module prefixes
+        // in case the binary was rebuilt with a different product name.
+        NSArray<NSString *> *candidates = @[
+            @"audiomack_iphone.NavigationBarVC",
+            @"audiomack.NavigationBarVC",
+            @"NavigationBarVC",
+        ];
+
+        Class target = Nil;
+        for (NSString *name in candidates) {
+            target = objc_getClass([name UTF8String]);
+            if (target) {
+                NSLog(@"[MRzefvAM] hooked %@", name);
+                break;
+            }
+        }
+
+        if (!target) {
+            NSLog(@"[MRzefvAM] NavigationBarVC not found — no hook installed");
+            return;
+        }
+
+        SLSwizzle(target,
+                  @selector(viewDidLayoutSubviews),
+                  (IMP)hook_viewDidLayoutSubviews,
+                  (IMP *)&orig_viewDidLayoutSubviews);
+
+        SLSwizzle(target,
+                  @selector(viewDidAppear:),
+                  (IMP)hook_viewDidAppear,
+                  (IMP *)&orig_viewDidAppear);
+    }
+}
