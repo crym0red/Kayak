@@ -1,0 +1,48 @@
+name: Build unsigned IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.0'
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project KayakSwiftUI.xcodeproj \
+            -scheme KayakSwiftUI
+
+      - name: Build unsigned IPA
+        run: |
+          chmod +x Scripts/build.sh
+          ./Scripts/build.sh
+
+      - name: Verify IPA
+        run: |
+          test -f build/KayakSwiftUI-unsigned.ipa
+          unzip -l build/KayakSwiftUI-unsigned.ipa | head -40
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: KayakSwiftUI-unsigned-IPA
+          path: build/KayakSwiftUI-unsigned.ipa
+          if-no-files-found: error
