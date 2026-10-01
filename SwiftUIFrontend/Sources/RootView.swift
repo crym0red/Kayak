@@ -2,10 +2,12 @@ import SwiftUI
 
 struct RootView: View {
     @State private var selected = 0
-    @State private var showIntro = true
 
     var body: some View {
-        ZStack(alignment: .bottom) {
+        ZStack {
+            Color(red: 0.04, green: 0.07, blue: 0.08)
+                .ignoresSafeArea()
+
             Group {
                 switch selected {
                 case 0: HomeView()
@@ -14,22 +16,12 @@ struct RootView: View {
                 default: ProfileView()
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea()
-
-            bottomBar
-
-            if showIntro {
-                IntroView()
-                    .transition(.opacity)
-                    .zIndex(10)
-            }
         }
-        .ignoresSafeArea()
-        .task {
-            try? await Task.sleep(for: .seconds(2.2))
-            withAnimation(.easeOut(duration: 0.35)) {
-                showIntro = false
-            }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            bottomBar
+                .padding(.bottom, 8)
         }
     }
 
@@ -45,20 +37,24 @@ struct RootView: View {
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().stroke(.white.opacity(0.55), lineWidth: 1))
         .padding(.horizontal, 48)
-        .padding(.bottom, 8)
         .shadow(radius: 18)
     }
 
     private func tab(_ icon: String, _ title: String, _ index: Int) -> some View {
         Button { selected = index } label: {
             VStack(spacing: 4) {
-                Image(systemName: icon).font(.title2)
-                Text(title).font(.caption)
+                Image(systemName: icon)
+                    .font(.system(size: 27, weight: .medium))
+                Text(title)
+                    .font(.system(size: 17, weight: .medium))
             }
             .frame(maxWidth: .infinity)
             .foregroundStyle(selected == index ? .blue : .primary)
             .padding(.vertical, 7)
-            .background(selected == index ? .white.opacity(0.35) : .clear, in: Capsule())
+            .background(
+                selected == index ? .white.opacity(0.35) : .clear,
+                in: Capsule()
+            )
         }
         .buttonStyle(.plain)
     }

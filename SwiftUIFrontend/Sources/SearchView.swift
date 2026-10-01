@@ -8,7 +8,12 @@ final class SearchViewModel: ObservableObject {
 
     func search(_ query: String, token: String?) async {
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { results = []; return }
+        guard !text.isEmpty else {
+            results = []
+            errorMessage = nil
+            return
+        }
+
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -19,9 +24,11 @@ final class SearchViewModel: ObservableObject {
                 parameters: ["keyword": text, "page": 1, "limit": 30],
                 token: token
             )
-            results = APIExtractor.dictionaries(from: response).compactMap(MediaItem.init).reduce(into: []) { result, item in
-                if !result.contains(item) { result.append(item) }
-            }
+            results = APIExtractor.dictionaries(from: response)
+                .compactMap(MediaItem.init)
+                .reduce(into: []) { result, item in
+                    if !result.contains(item) { result.append(item) }
+                }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -34,35 +41,72 @@ struct SearchView: View {
     @State private var query = ""
 
     var body: some View {
-        ZStack {
-            Color(red: 0.04, green: 0.07, blue: 0.08).ignoresSafeArea()
-            ScrollView(showsIndicators: false) {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 18) {
-                    ForEach(model.results) { item in
-                        VStack(alignment: .leading, spacing: 7) {
-                            RemoteImage(url: item.imageURL).aspectRatio(0.67, contentMode: .fill).clipShape(RoundedRectangle(cornerRadius: 7))
-                            Text(item.title).foregroundStyle(.white).font(.footnote).lineLimit(1)
+        GeometryReader { proxy in
+            ZStack(alignment: .top) {
+                Color(red: 0.04, green: 0.07, blue: 0.08)
+                    .ignoresSafeArea()
+
+                ScrollView(showsIndicators: false) {
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(), spacing: 12),
+                            GridItem(.flexible(), spacing: 12),
+                            GridItem(.flexible(), spacing: 12)
+                        ],
+                        spacing: 18
+                    ) {
+                        ForEach(model.results) { item in
+                            VStack(alignment: .leading, spacing: 7) {
+                                RemoteImage(url: item.imageURL)
+                                    .aspectRatio(0.67, contentMode: .fill)
+                                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                                Text(item.title)
+                                    .foregroundStyle(.white)
+                                    .font(.footnote)
+                                    .lineLimit(1)
+                            }
                         }
                     }
+                    .padding(16)
+                    .padding(.top, proxy.safeAreaInsets.top + 74)
+                    .padding(.bottom, 24)
                 }
-                .padding(16)
-            }
-            .safeAreaInset(edge: .top) {
-                HStack {
-                    TextField("Search", text: $query)
-                        .textInputAutocapitalization(.never)
-                        .submitLabel(.search)
-                        .onSubmit { Task { await model.search(query, token: session.token) } }
-                    Image(systemName: "magnifyingglass")
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 16)
-                .frame(height: 48)
-                .background(.white.opacity(0.13), in: Capsule())
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color(red: 0.02, green: 0.25, blue: 0.33))
+                .ignoresSafeArea()
+
+                searchBar(topInset: proxy.safeAreaInsets.top)
             }
         }
+    }
+
+    private func searchBar(topInset: CGFloat) -> some View {
+        HStack {
+            TextField("Search", text: $query)
+                .textInputAutocapitalization(.never)
+                .submitLabel(.search)
+                .onSubmit {
+                    Task { await model.search(query, token: session.token) }
+                }
+
+            Image(systemName: "magnifyingglass")
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 16)
+        .frame(height: 50)
+        .background(.white.opacity(0.13), in: Capsule())
+        .padding(.horizontal, 16)
+        .padding(.top, topInset + 8)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color(red: 0.02, green: 0.40, blue: 0.52),
+                    Color(red: 0.04, green: 0.10, blue: 0.13)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .top)
+        )
     }
 }

@@ -9,7 +9,7 @@ struct MediaItem: Identifiable, Hashable {
 
     init?(object: [String: Any]) {
         guard let id = APIExtractor.firstString(object, keys: ["vod_id", "topic_id", "channel_id", "id", "uuid"]),
-              let title = APIExtractor.firstString(object, keys: ["vod_name", "topic_name", "channel_name", "title", "name"]) else {
+              let title = APIExtractor.firstString(object, keys: ["vod_name", "topic_name", "channel_name", "type_name", "title", "name"]) else {
             return nil
         }
         self.id = id
