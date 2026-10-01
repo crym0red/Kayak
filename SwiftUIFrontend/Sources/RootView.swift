@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @State private var selected = 0
+    @State private var showIntro = true
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -16,8 +17,20 @@ struct RootView: View {
             .ignoresSafeArea()
 
             bottomBar
+
+            if showIntro {
+                IntroView()
+                    .transition(.opacity)
+                    .zIndex(10)
+            }
         }
         .ignoresSafeArea()
+        .task {
+            try? await Task.sleep(for: .seconds(2.2))
+            withAnimation(.easeOut(duration: 0.35)) {
+                showIntro = false
+            }
+        }
     }
 
     private var bottomBar: some View {
